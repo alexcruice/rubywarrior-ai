@@ -3,20 +3,25 @@ class Player
   DIRECTIONS = [:forward, :right, :backward, :left]
   MAX_HP = 20
   PRIORITIES = { ticking: 1, hp: 2, enemy: 3, captive: 4 }
-  @heal = false
+  @heal_cycle = false
 
   def play_turn(warrior)
     @warrior = warrior
 
-    if @heal
+    if @heal_cycle
       # crude healing cycle control
-      @heal = false if warrior.health >= MAX_HP * 0.9
+      @heal_cycle = false if warrior.health >= MAX_HP * 0.9
       warrior.rest!
     else
       tasks = warrior.listen.map { |space| Task.new(warrior.health, space) }
       tasks.push(Task.new(warrior.health, nil)) if warrior.health < MAX_HP
       tasks.sort!
-      tasks.empty? ? warrior.walk!(warrior.direction_of_stairs) : action(tasks.first.tag, tasks.first.space)
+      if tasks.empty?
+        @prev_dir = warrior.direction_of_stairs
+        warrior.walk!(@prev_dir)
+      else
+        action(tasks.first.tag, tasks.first.space)
+      end
     end
   end
 
@@ -35,7 +40,8 @@ class Player
       adj_enemies.select! { |s| s.enemy? }
       @prev_dir = nil
       if adj_enemies.empty?
-        @heal = true
+        @heal_cycle = true
+        @warrior.rest!
       else
         @warrior.bind!(@warrior.direction_of(adj_enemies.first))
       end
@@ -89,7 +95,7 @@ class Player
     def initialize(hp, space)
       if space.nil?
         # low hp priority modifier
-        @priority = PRIORITIES.size - PRIORITIES[@tag = :hp]# + (MAX_HP / 2 - hp)
+        @priority = PRIORITIES.size - PRIORITIES[@tag = :hp] + (MAX_HP * 0.25 - hp)
       else
         @priority = score(@space = space)
       end
