@@ -36,8 +36,7 @@ class Player
         path(dir)
       end
     when :hp
-      adj_enemies = DIRECTIONS.map { |dir| @warrior.feel(dir) }
-      adj_enemies.select! { |s| s.enemy? }
+      adj_enemies = scout.select! { |s| s.enemy? }
       @prev_dir = nil
       if adj_enemies.empty?
         @heal_cycle = true
@@ -47,8 +46,7 @@ class Player
       end
     when :enemy
       if @warrior.feel(dir).enemy?
-        @prev_dir = nil
-        @warrior.attack!(dir)
+        overwhelming_odds(dir)
       else
         path(dir)
       end
@@ -70,22 +68,39 @@ class Player
 
     progress_spaces.select! { |s| s.empty? && !s.stairs? }
     if progress_spaces.empty?
-      adj_enemies = DIRECTIONS.map { |dir| @warrior.feel(dir) }
-      adj_enemies.select! { |s| s.enemy? }
-      @prev_dir = nil
-      if adj_enemies.length == 1
-        @warrior.attack!(@warrior.direction_of(adj_enemies.first))
-      else
-        @warrior.bind!(@warrior.direction_of(adj_enemies.last))
-      end
+      overwhelming_odds(desired_dir)
     else
-      @prev_dir = @warrior.direction_of(progress_spaces.first)
-      @warrior.walk!(@prev_dir)
+      @warrior.walk!(@prev_dir = @warrior.direction_of(progress_spaces.first))
+    end
+  end
+
+  def scout(*target)
+    if target.empty?
+      DIRECTIONS.map { |dir| @warrior.feel(dir) }
+    else
+      i = DIRECTIONS.index(target.first)
+      focused_scout = []
+      (0..3).each { |offset| focused_scout.push(@warrior.feel(DIRECTIONS[(i + offset) % DIRECTIONS.length])) }
+      focused_scout
+    end
+  end
+
+  def overwhelming_odds(target)
+    adj_enemies = scout(target).select! { |s| s.enemy? }
+    @prev_dir = nil
+    if adj_enemies.length == 1
+      @warrior.attack!(@warrior.direction_of(adj_enemies.first))
+    else
+      @warrior.bind!(@warrior.direction_of(adj_enemies.last))
     end
   end
 
   def regress?(dir)
-    @prev_dir.nil? ? false : dir == DIRECTIONS[(DIRECTIONS.index(@prev_dir) + 2) % DIRECTIONS.length]
+    if @prev_dir.nil?
+      false
+    else
+      dir == DIRECTIONS[(DIRECTIONS.index(@prev_dir) + 2) % DIRECTIONS.length]
+    end
   end
 
   # each Task has a tag, a priority and possibly an associated space object
@@ -97,7 +112,8 @@ class Player
         @priority = score(@space = cause)
       else
         # custom low hp priority modifier
-        @priority = PRIORITIES.size - PRIORITIES[@tag = :hp] + (MAX_HP * 0.25 - cause)
+        @priority =
+          PRIORITIES.size - PRIORITIES[@tag = :hp] + (MAX_HP * 0.25 - cause)
       end
     end
 
