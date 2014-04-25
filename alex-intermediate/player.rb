@@ -13,8 +13,8 @@ class Player
       @heal_cycle = false if warrior.health >= MAX_HP * 0.9
       warrior.rest!
     else
-      tasks = warrior.listen.map { |space| Task.new(warrior.health, space) }
-      tasks.push(Task.new(warrior.health, nil)) if warrior.health < MAX_HP
+      tasks = warrior.listen.map { |space| Task.new(space) }
+      tasks.push(Task.new(warrior.health)) if warrior.health < MAX_HP
       tasks.sort!
       if tasks.empty?
         @prev_dir = warrior.direction_of_stairs
@@ -88,16 +88,16 @@ class Player
     @prev_dir.nil? ? false : dir == DIRECTIONS[(DIRECTIONS.index(@prev_dir) + 2) % DIRECTIONS.length]
   end
 
-  # each Task has a tag, priority and maybe a space object attached
+  # each Task has a tag, a priority and possibly an associated space object
   class Task
     attr_reader :priority, :tag, :space
 
-    def initialize(hp, space)
-      if space.nil?
-        # low hp priority modifier
-        @priority = PRIORITIES.size - PRIORITIES[@tag = :hp] + (MAX_HP * 0.25 - hp)
+    def initialize(cause)
+      if cause.respond_to?(:empty?) # test for space object
+        @priority = score(@space = cause)
       else
-        @priority = score(@space = space)
+        # custom low hp priority modifier
+        @priority = PRIORITIES.size - PRIORITIES[@tag = :hp] + (MAX_HP * 0.25 - cause)
       end
     end
 
@@ -112,6 +112,7 @@ class Player
       PRIORITIES.size - PRIORITIES[@tag]
     end
 
+    # used to sort! tasks in descending priority
     def <=>(other)
       if priority < other.priority
         1
