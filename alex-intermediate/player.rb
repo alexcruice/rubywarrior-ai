@@ -14,7 +14,7 @@ class Player
       warrior.rest!
     else
       tasks = warrior.listen.map { |space| Task.new(space) }
-      tasks.push(Task.new(warrior.health)) if warrior.health < MAX_HP
+      tasks.push(Task.new(warrior.health)) unless tasks.empty? || warrior.health == MAX_HP
       tasks.sort!
       if tasks.empty?
         @prev_dir = warrior.direction_of_stairs
