@@ -10,7 +10,7 @@ class Player
 
     if @heal_cycle
       # crude healing cycle control
-      @heal_cycle = false if warrior.health >= MAX_HP * 0.9
+      @heal_cycle = false if warrior.health >= MAX_HP * 0.85
       warrior.rest!
     else
       tasks = warrior.listen.map { |space| Task.new(space) }
