@@ -3,19 +3,21 @@ class Player
   DIRS = [:forward, :right, :backward, :left]
   MAX_HP = 20
   PRIORITIES = { ticking: 1, hp: 2, enemy: 3, captive: 4 }
-  @heal_cycle = false
 
   def play_turn(warrior)
     @warrior = warrior
+    @turn  = @turn.nil? ? 1 : @turn + 1
 
     if @heal_cycle
       # crude healing cycle control
       @heal_cycle = false if warrior.health >= MAX_HP * 0.85
       warrior.rest!
     else
-      tasks = warrior.listen.map { |space| Task.new(space) }
+      tasks = warrior.listen.map do |space|
+        Task.new(space, @turn, warrior.distance_of(space))
+      end
       unless tasks.empty? || warrior.health == MAX_HP
-        tasks.push(Task.new(warrior.health))
+        tasks.push(Task.new(warrior.health, @turn))
       end
       tasks.sort!
       if tasks.empty?
@@ -66,7 +68,11 @@ class Player
     progress.reject! { |space| space.stairs? }
     progress.reject! { |space| regress?(@warrior.direction_of(space)) }
     if progress.empty?
-      overwhelming_odds(desired_dir)
+      if bomb_greenlight?(desired_dir)
+        @warrior.detonate!(desired_dir)
+      else
+        overwhelming_odds(desired_dir)
+      end
     else
       @warrior.walk!(@prev_step = @warrior.direction_of(progress.first))
     end
@@ -99,29 +105,40 @@ class Player
     end
   end
 
+  def bomb_greenlight?(dir)
+    adj_enemies = scout(dir).select { |space| space.enemy? }
+    enemies_ahead = 0
+    @warrior.look(dir).map.with_index do |space, i|
+      enemies_ahead += 1 if i < 2 && space.enemy?
+    end
+    if enemies_ahead == 2 && @warrior.health > 4 && adj_enemies.length == 1
+      true
+    else
+      false
+    end
+  end
+
   # each Task has a tag, a priority and possibly an associated space object
   class Task
     attr_reader :priority, :tag, :space
 
-    def initialize(cause)
-      if cause.respond_to?(:empty?) # test for space object
-        @priority = score(@space = cause)
+    def initialize(motive, turn, distance = 1)
+      modifier = 0
+      if motive.respond_to?(:empty?) # test for space object
+        @space = motive
+        if motive.ticking?
+          @tag = :ticking
+          modifier = turn
+        elsif motive.enemy?
+          @tag = :enemy
+        elsif motive.captive?
+          @tag = :captive
+        end
       else
-        # custom low hp priority modifier
-        @priority =
-          PRIORITIES.size - PRIORITIES[@tag = :hp] + (MAX_HP * 0.25 - cause)
+        @tag = :hp
+        modifier = MAX_HP * 0.25 - motive
       end
-    end
-
-    def score(space)
-      if space.ticking?
-        @tag = :ticking
-      elsif space.enemy?
-        @tag = :enemy
-      elsif space.captive?
-        @tag = :captive
-      end
-      PRIORITIES.size - PRIORITIES[@tag]
+      @priority = (PRIORITIES.size - PRIORITIES[@tag] + modifier) / distance
     end
 
     # used to sort! tasks in descending priority
