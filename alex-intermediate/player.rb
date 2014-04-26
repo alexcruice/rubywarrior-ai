@@ -72,17 +72,13 @@ class Player
     end
   end
 
-  def scout(*target)
-    if target.empty?
-      DIRS.map { |dir| @warrior.feel(dir) }
-    else
-      i = DIRS.index(target.first)
-      focused_scout = []
-      (0..3).each do |offset|
-        focused_scout.push(@warrior.feel(DIRS[(i + offset) % DIRS.length]))
-      end
-      focused_scout
+  def scout(target = :forward)
+    i = DIRS.index(target)
+    focused_scout = []
+    (0..3).each do |offset|
+      focused_scout.push(@warrior.feel(DIRS[(i + offset) % DIRS.length]))
     end
+    focused_scout
   end
 
   def overwhelming_odds(target)
