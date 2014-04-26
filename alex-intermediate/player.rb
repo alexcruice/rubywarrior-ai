@@ -1,6 +1,6 @@
 # rubywarrior AI
 class Player
-  DIRECTIONS = [:forward, :right, :backward, :left]
+  DIRS = [:forward, :right, :backward, :left]
   MAX_HP = 20
   PRIORITIES = { ticking: 1, hp: 2, enemy: 3, captive: 4 }
   @heal_cycle = false
@@ -14,30 +14,31 @@ class Player
       warrior.rest!
     else
       tasks = warrior.listen.map { |space| Task.new(space) }
-      tasks.push(Task.new(warrior.health)) unless tasks.empty? || warrior.health == MAX_HP
+      unless tasks.empty? || warrior.health == MAX_HP
+        tasks.push(Task.new(warrior.health))
+      end
       tasks.sort!
       if tasks.empty?
-        @prev_dir = warrior.direction_of_stairs
-        warrior.walk!(@prev_dir)
+        warrior.walk!(@prev_step = warrior.direction_of_stairs)
       else
         action(tasks.first.tag, tasks.first.space)
       end
     end
   end
 
-  def action(mode, space)
-    dir = @warrior.direction_of(space) unless space.nil?
+  def action(mode, target_space)
+    dir = @warrior.direction_of(target_space) unless target_space.nil?
     case mode
     when :ticking
       if @warrior.feel(dir).ticking?
-        @prev_dir = nil
+        @prev_step = nil
         @warrior.rescue!(dir)
       else
         path(dir)
       end
     when :hp
-      adj_enemies = scout.select! { |s| s.enemy? }
-      @prev_dir = nil
+      adj_enemies = scout.select { |space| space.enemy? }
+      # @prev_step = nil
       if adj_enemies.empty?
         @heal_cycle = true
         @warrior.rest!
@@ -52,7 +53,7 @@ class Player
       end
     when :captive
       if @warrior.feel(dir).captive?
-        @prev_dir = nil
+        @prev_step = nil
         @warrior.rescue!(dir)
       else
         path(dir)
@@ -61,34 +62,33 @@ class Player
   end
 
   def path(desired_dir)
-    progress_spaces = []
-    i = DIRECTIONS.index(desired_dir)
-
-    DIRECTIONS.map { |dir| progress_spaces.push(@warrior.feel(dir)) if dir == desired_dir || (dir == DIRECTIONS[(i + 1) % DIRECTIONS.length] && !regress?(dir)) || (dir == DIRECTIONS[(i + 3) % DIRECTIONS.length] && !regress?(dir)) }
-
-    progress_spaces.select! { |s| s.empty? && !s.stairs? }
-    if progress_spaces.empty?
+    progress = scout(desired_dir).select { |space| space.empty? }
+    progress.reject! { |space| space.stairs? }
+    progress.reject! { |space| regress?(@warrior.direction_of(space)) }
+    if progress.empty?
       overwhelming_odds(desired_dir)
     else
-      @warrior.walk!(@prev_dir = @warrior.direction_of(progress_spaces.first))
+      @warrior.walk!(@prev_step = @warrior.direction_of(progress.first))
     end
   end
 
   def scout(*target)
     if target.empty?
-      DIRECTIONS.map { |dir| @warrior.feel(dir) }
+      DIRS.map { |dir| @warrior.feel(dir) }
     else
-      i = DIRECTIONS.index(target.first)
+      i = DIRS.index(target.first)
       focused_scout = []
-      (0..3).each { |offset| focused_scout.push(@warrior.feel(DIRECTIONS[(i + offset) % DIRECTIONS.length])) }
+      (0..3).each do |offset|
+        focused_scout.push(@warrior.feel(DIRS[(i + offset) % DIRS.length]))
+      end
       focused_scout
     end
   end
 
   def overwhelming_odds(target)
-    adj_enemies = scout(target).select! { |s| s.enemy? }
-    @prev_dir = nil
+    adj_enemies = scout(target).select { |space| space.enemy? }
     if adj_enemies.length == 1
+      # @prev_step = nil
       @warrior.attack!(@warrior.direction_of(adj_enemies.first))
     else
       @warrior.bind!(@warrior.direction_of(adj_enemies.last))
@@ -96,10 +96,10 @@ class Player
   end
 
   def regress?(dir)
-    if @prev_dir.nil?
+    if @prev_step.nil?
       false
     else
-      dir == DIRECTIONS[(DIRECTIONS.index(@prev_dir) + 2) % DIRECTIONS.length]
+      dir == DIRS[(DIRS.index(@prev_step) + 2) % DIRS.length]
     end
   end
 
